@@ -66,27 +66,61 @@ except FileNotFoundError as error:
     boss_message(msg)
     raise SystemExit
 
-
-themes = dict()
-for i in range(len(wb2.sheetnames) - 2):
-    testsheet = wb2[wb2.sheetnames[i]]
-    themes.update({wb2.sheetnames[i]: {}})
-
-    A_testsheet = testsheet['A']
-    B_testsheet = testsheet['B']
-    C_testsheet = testsheet['C']
-    D_testsheet = testsheet['D']
-
-    for A in A_testsheet:
-        themes[wb2.sheetnames[i]].update({testsheet.cell(row=A.row, column=1).value: {}})
-
-    for B in B_testsheet:
-        themes[wb2.sheetnames[i]][testsheet.cell(row=B.row, column=1).value].update(
-            {testsheet.cell(row=B.row, column=2).value: {}})
-
-    for C in C_testsheet:
-        themes[wb2.sheetnames[i]][testsheet.cell(row=C.row, column=1).value][
-            testsheet.cell(row=C.row, column=2).value].update({testsheet.cell(row=C.row, column=3).value: {}})
+# learnthemes = dict()
+# learnthemes = dict.fromkeys(wb2.sheetnames[:-2], {})
+# print(learnthemes)
+# for i in range(len(wb2.sheetnames) - 2):
+#     learnsheet = wb2[wb2.sheetnames[i]] # это конкретная страница
+#
+#     learnthemes.update({wb2.sheetnames[i]: {}})
+#
+#     # A_testsheet = testsheet['A']
+#     # B_testsheet = testsheet['B']
+#     # C_testsheet = testsheet['C']
+#     # D_testsheet = testsheet['D']
+#
+#     dictionary = learnthemes[wb2.sheetnames[i]] # это словарь уровня листа
+#     # supp_dict = dict()
+#     supp_dict = dictionary
+#
+#     for col in range(1, learnsheet.max_column+1):
+#         # здесь как то поменять уровнь словаря + чтобы это был нужный словарь
+#         if col > 2:
+#             dictionary = dictionary[learnsheet.cell(row=1, column=col-2).value]
+#             # supp_dict = dictionary[learnsheet.cell(row=1, column=col-1).value]
+#         for row in range(1, learnsheet.max_row+1):
+#             if col > 1:
+#                 supp_dict = dictionary[learnsheet.cell(row=row, column=col-1).value]
+#             # elif col == 1:
+#             #     supp_dict = dictionary
+#             # assert isinstance(supp_dict, dict), "subtheme is not an dict: %r" % supp_dict
+#             supp_dict.update({learnsheet.cell(row=row, column=col).value: {}})
+#
+#             # for A in A_testsheet:
+#             #     learnthemes[wb2.sheetnames[i]].update({learnsheet.cell(row=A.row, column=1).value: {}})
+#             #
+#             # for B in B_testsheet:
+#             #     learnthemes[wb2.sheetnames[i]][learnsheet.cell(row=B.row, column=1).value].update(
+#             #         {learnsheet.cell(row=B.row, column=2).value: {}})
+#             #
+#             # for C in C_testsheet:
+#             #     learnthemes[wb2.sheetnames[i]][learnsheet.cell(row=C.row, column=1).value][
+#             #         learnsheet.cell(row=C.row, column=2).value].update({learnsheet.cell(row=C.row, column=3).value: {}})
+# themes = dict()
+# for A in A_testsheet:
+#     themes.update({testsheet.cell(row=A.row, column=1).value: {}})
+#
+# for B in B_testsheet:
+#     for key, value in themes.items():
+#         if key == testsheet.cell(row=B.row, column=1).value:
+#             value.update({testsheet.cell(row=B.row, column=2).value: {}})
+#
+# for C in C_testsheet:
+#     for key, value in themes.items():
+#         if key == testsheet.cell(row=C.row, column=1).value:
+#             for key, value in value.items():
+#                 if key == testsheet.cell(row=C.row, column=2).value:
+#                     value.update({testsheet.cell(row=C.row, column=3).value: {}})
 
 def wb_save():
     global wb
@@ -136,7 +170,7 @@ def user_default_markup():
     default_markup.row('Взять Оборудование')
     default_markup.row('Сдать Оборудование')
     default_markup.row('Взять расходники')
-    default_markup.row('Тестирование')
+    default_markup.row('Обучение')
     return default_markup
 
 
@@ -155,7 +189,6 @@ def column_to_txt(letter):
     if msg == "":
         msg = "Ничего нет!"
     return msg
-
 
 # фамилия, пробел и имя отправителя сообщения
 def sender_name(message):
@@ -180,6 +213,12 @@ def row_of_value_in_cells(value, cells):
             return cell.row
     return 0
 
+
+def col_row_of_value_in_cells(value, cells):
+    for cell in cells:
+        if value == cell.value:
+            return dict(col=cell.col, row= cell.row)
+    return dict(col=0, row= 0)
 
 @bot.message_handler(commands=["start"])
 def handle_text(message):
@@ -400,7 +439,8 @@ def handle_text(message):
     #     bot.send_message(message.chat.id, "Работаем", reply_markup=boss_default_markup())
 
 
-# TODO level
+# переменная для слежения за процессом обучения, содержит имя пользователя, страницу обучения и уровень глубины
+# TODO может убрать страницы обучения сделав их первой колонкой
 level = dict()
 
 # обработка сообщений пользователя с value == 'принят'
@@ -408,7 +448,6 @@ level = dict()
 @bot.message_handler(func=lambda message: constants.debug_mode or # использовать при отладке
 # @bot.message_handler(func=lambda message: message.from_user.id != constants.bossChatID and
                                           users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=3).value == 'принят',
-                                          # or True, # убрать
                      content_types=["text"])
 def handle_text(message):
     global users_sheet, tools_sheet, tools_book, tools_income # log_sheet
@@ -600,47 +639,32 @@ def handle_text(message):
     elif 'Обучение' in message.text:
         user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
         for i in range(len(wb2.sheetnames) - 2):
-            # print(wb2.sheetnames[i])
             user_markup.row(wb2.sheetnames[i])
         user_markup.row('Отмена')
-        bot.send_message(message.from_user.id, "Запускаем тестирование. Выберите тему.",
+        bot.send_message(message.from_user.id, "Выбирайте интересующие вас разделы, и изучайте информацию.",
                          reply_markup=user_markup)
-        level.update({sender_name(message): 0})
+        level.update({sender_name(message): {'sheet': message.text, 'level': 0}})
 
     elif istest(message.text):
-        level.update({sender_name(message): 1})
+        level.update({sender_name(message): {'sheet': message.text, 'level': 1}})
+        # level.update({sender_name(message): 1})
         # TODO начать таймер
-        # бот вываливает кнопки исходя из УНИКАЛЬНЫХ значений первого столбца
-        # testsheet = wb2[message.text]
+
         # A_testsheet = testsheet['A']
-        # B_testsheet = testsheet['B']
-        # C_testsheet = testsheet['C']
-        # D_testsheet = testsheet['D']
-        #
-        # # themes = set()
-        # themes = dict()
-        # for A in A_testsheet:
-        #     themes.update({testsheet.cell(row=A.row, column=1).value: {}})
-        #
-        # for B in B_testsheet:
-        #     for key, value in themes.items():
-        #         if key == testsheet.cell(row=B.row, column=1).value:
-        #             value.update({testsheet.cell(row=B.row, column=2).value: {}})
-        #
-        # for C in C_testsheet:
-        #     for key, value in themes.items():
-        #         if key == testsheet.cell(row=C.row, column=1).value:
-        #             for key, value in value.items():
-        #                 if key == testsheet.cell(row=C.row, column=2).value:
-        #                     value.update({testsheet.cell(row=C.row, column=3).value: {}})
+        A_column = wb2[level[sender_name(message)]['sheet']]['A']
+
+        my_set = set()
+        for cell in A_column:
+            # 'Неподтвержденный {0} отправил: "{1}"'.format(sender_name(message), message.text))
+            assert cell.value != None, "неправильная ячейка: {0} {1} = None".format(cell.row, cell.column)
+            my_set.update([cell.value])
+            # my_set.add([cell.value])
 
         user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        for theme in themes.keys():
-            user_markup.row(theme)
+        for item in my_set:
+            assert isinstance(item, str), 'oops not a string - {0}'.format(type(item))
+            user_markup.row(item)
         user_markup.row('Отмена')
-
-        # bot.send_message(message.from_user.id, "Запускаем тестирование. Выберите тему.",
-        #                  reply_markup=user_markup)
 
         #если второй столбец последний из заполненных, то он уже выдает текстовым сообщением информацию
         # if len(testsheet.columns) != 2:
@@ -649,9 +673,85 @@ def handle_text(message):
         #если второй столбец не последни заполненный из выбранного раздела,
         #  то бот вываливает кнопки с уникальными разделами второго столбца и так далее
 
-    elif level[sender_name(message)]>0:
+    elif level[sender_name(message)]['level']>0:
+        # {sender_name(message): {'sheet': message.text, 'level': 1}}
+        my_sheet = level[sender_name(message)]['sheet']
+        my_col = level[sender_name(message)]['level']
+
+        N_sheet = wb2[my_sheet]
+
+        from string import ascii_uppercase
+        assert my_col <= len(ascii_uppercase), "oh shi too deep"
+        N_column = N_sheet[ascii_uppercase[my_col-1]]
+
+        if row_of_value_in_cells(message.text, N_column):
+            my_row = row_of_value_in_cells(message.text, N_column)
+        else:
+            bot.send_message(message.from_user.id,
+                             "Ошибка ввода. Давайте всё по новой",
+                             reply_markup=user_default_markup())
+            return
+
+        if N_sheet.cell(row=my_row, column=my_col+2).value == None:
+            for cell in N_column:
+                if cell.value == message.text:
+                    # assert (N_sheet.cell(row=cell.row, column=my_col-1).value == \
+                    #     N_sheet.cell(row=my_row, column=my_col-1).value), 'неправильная выдача'
+                    # bot.send_message(message.from_user.id,
+                    #                  N_sheet.cell(row=cell.row, column=my_col+1).value,
+                    #                  reply_markup=user_default_markup())
+                    if my_col == 1:
+                        bot.send_message(message.from_user.id,
+                                         N_sheet.cell(row=cell.row, column=my_col + 1).value,
+                                         reply_markup=user_default_markup())
+                    elif (N_sheet.cell(row=cell.row, column=my_col-1).value == N_sheet.cell(row=my_row, column=my_col-1).value):
+                        bot.send_message(message.from_user.id,
+                                         N_sheet.cell(row=cell.row, column=my_col + 1).value,
+                                         reply_markup=user_default_markup())
+                    else:
+                        assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
+            del level[sender_name(message)]
+        else:
+            # my_value = N_sheet.cell(row=my_row, col=my_col-1).value
+            my_set = set()
+            for cell in N_column:
+                if cell.value == message.text:
+                    my_set.update([N_sheet.cell(row=cell.row, column=my_col+1).value])
+
+            user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+            for item in my_set:
+                user_markup.row(item)
+            user_markup.row('Отмена')
+
+            bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
+                             reply_markup=user_markup)
+
+            # my_col = my_col+1
+            level[sender_name(message)]['level'] = level[sender_name(message)]['level']+1
+
+
         #проверка наличия в листе
-        return
+        # colrow_dict = col_row_of_value_in_cells(message.text, wb2[level[sender_name(message)]['sheet']].get_cell_collection)
+        # if colrow_dict['col'] != 0 and colrow_dict['row'] !=0:
+        #     # N_column = wb2[level[sender_name(message)]['sheet']].iter_cols()
+        #     N_sheet = wb2[level[sender_name(message)]['sheet']]
+        #     N_column = N_sheet.columns[colrow_dict['col']]
+        #
+        #     user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+        #     # мы нашли на странице значение и должны показать или кнопки или обучающую информацию
+        #     if N_sheet.cell(row=colrow_dict['row'], col=colrow_dict['col']+2).value == None:
+        #         bot.send_message(message.from_user.id,
+        #                          N_sheet.cell(row=colrow_dict['row'], col=colrow_dict['col']+1).value,
+        #                          reply_markup=user_default_markup())
+        #         del level[sender_name(message)]
+        #         for cell in N_column:
+        #             pass
+        #         # tools_sheet.cell(row=tool.row, column=2).value
+        #
+        #     user_markup.row('Отмена')
+        #
+        #     bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
+        #                      reply_markup=user_markup)
 
     else:
         answer = "Что-что?"

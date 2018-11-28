@@ -300,8 +300,8 @@ def handle_people(message):
         log_message(message, "Люди markup на {0} строк".format(a))
 
 
-# @bot.message_handler(func=lambda message: (message.from_user.id == constants.bossChatID) and constants.Boss_mode,
-@bot.message_handler(func=lambda message: message.from_user.id == constants.bossChatID,
+@bot.message_handler(func=lambda message: (message.from_user.id == constants.bossChatID) and constants.Boss_mode, #TODO
+# @bot.message_handler(func=lambda message: message.from_user.id == constants.bossChatID,
                      content_types=["text"])
 def handle_text(message):
     global users_sheet, tools_income
@@ -438,6 +438,7 @@ def handle_text(message):
 # переменная для слежения за процессом обучения, содержит имя пользователя, страницу обучения и уровень глубины
 level = dict()
 
+
 def istested(my_dict, name):
     try:
         return my_dict[name]['level']>0
@@ -445,10 +446,15 @@ def istested(my_dict, name):
         log_error(e)
     return False
 
+
+def unique(sequence):
+    seen = set()
+    return [x for x in sequence if not (x in seen or seen.add(x))]
+
 # обработка сообщений пользователя с value == 'принят'
 # TODO обработка сообщений таким образом пропускает всех, кто начал не со "/start"
-# @bot.message_handler(func=lambda message: (message.from_user.id != constants.bossChatID or constants.Worker_mode) and
-@bot.message_handler(func=lambda message: message.from_user.id != constants.bossChatID and
+@bot.message_handler(func=lambda message: (message.from_user.id != constants.bossChatID or constants.Worker_mode) and #TODO
+# @bot.message_handler(func=lambda message: message.from_user.id != constants.bossChatID and
                                           users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=3).value == 'принят',
                      content_types=["text"])
 def handle_text(message):
@@ -652,13 +658,15 @@ def handle_text(message):
 
         A_column = wb2[level[sender_name(message)]['sheet']]['A']
 
-        my_set = set()
+        my_list = list()
         for cell in A_column:
             assert cell.value != None, "неправильная ячейка: {0} {1} = None".format(cell.row, cell.column)
-            my_set.update([cell.value])
+            my_list.append(cell.value)
+
+        # unique(my_list)
 
         user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        for item in my_set:
+        for item in unique(my_list):
             assert isinstance(item, str), 'oops not a string - {0}'.format(type(item))
             user_markup.row(item)
         user_markup.row('Отмена')
@@ -708,14 +716,13 @@ def handle_text(message):
                         assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
             del level[sender_name(message)]
         else:
-            # my_value = N_sheet.cell(row=my_row, col=my_col-1).value
-            my_set = set()
+            my_list = list()
             for cell in N_column:
-                if cell.value == message.text:
-                    my_set.update([N_sheet.cell(row=cell.row, column=my_col+1).value])
+                if cell.value == message.text and N_sheet.cell(row=cell.row, column=my_col+1).value not in my_list:
+                    my_list.append(N_sheet.cell(row=cell.row, column=my_col+1).value)
 
             user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-            for item in my_set:
+            for item in my_list:
                 user_markup.row(item)
             user_markup.row('Отмена')
 

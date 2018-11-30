@@ -2,6 +2,7 @@ import telebot
 import constants
 from openpyxl import load_workbook
 from time import sleep
+from datetime import datetime
 import logging
 # TODO пока не будем отправлять
 notificationsBoss = False
@@ -10,11 +11,13 @@ notificationsDev = False
 rashod = dict()
 rashodnik = dict()
 
-logging.basicConfig(format=u'%(levelname)-8s [%(asctime)s] %(message)s',
+# складывать логи в подпапку логи и TODO дробить на дни
+logging.basicConfig(format=u'%(levelname)-8s [%(asctime)s] %(name)s %(message)s',
+# logging.basicConfig(format=u'%(levelname)-8s [%(my_time)s] %(name)s %(message)s',
                     level=logging.INFO,
-                    filename=u'mylog.log')
+                    filename=u'логи/%s.log'%datetime.now().strftime("%d-%m-%Y"))
 
-logger = telebot.logger
+# telebot.logger.setLevel(logging.WARNING)
 telebot.logger.setLevel(logging.INFO)
 
 bot = telebot.TeleBot(constants.token)
@@ -49,78 +52,15 @@ try:
             rashodnik[user.value] = ''
 
     wb2 = load_workbook('ТренингБОТ.xlsx')
-    # for sheet in wb2.worksheets:
-    #     print(sheet)
-    # print('--')
-    # for i in range(len(wb2.sheetnames)-2):
-    #     print(wb2.sheetnames[i])
-    # print('--')
-    # for sheet in wb2.sheetnames:
-    #     print(sheet)
-    # print('--')
 
 except FileNotFoundError as error:
-    msg = 'Не могу найти файл "оборудование.xlsx", а без него работать не могу'
+    msg = 'Не могу найти файл "%s", а без него работать не могу'%(error.filename)
     print(msg)
-    logger.error(msg)
+    # logging.error(msg, extra={'my_time': datetime.now().strftime("%H.%M")})
+    logging.error(msg)
     boss_message(msg)
     raise SystemExit
 
-# learnthemes = dict()
-# learnthemes = dict.fromkeys(wb2.sheetnames[:-2], {})
-# print(learnthemes)
-# for i in range(len(wb2.sheetnames) - 2):
-#     learnsheet = wb2[wb2.sheetnames[i]] # это конкретная страница
-#
-#     learnthemes.update({wb2.sheetnames[i]: {}})
-#
-#     # A_testsheet = testsheet['A']
-#     # B_testsheet = testsheet['B']
-#     # C_testsheet = testsheet['C']
-#     # D_testsheet = testsheet['D']
-#
-#     dictionary = learnthemes[wb2.sheetnames[i]] # это словарь уровня листа
-#     # supp_dict = dict()
-#     supp_dict = dictionary
-#
-#     for col in range(1, learnsheet.max_column+1):
-#         # здесь как то поменять уровнь словаря + чтобы это был нужный словарь
-#         if col > 2:
-#             dictionary = dictionary[learnsheet.cell(row=1, column=col-2).value]
-#             # supp_dict = dictionary[learnsheet.cell(row=1, column=col-1).value]
-#         for row in range(1, learnsheet.max_row+1):
-#             if col > 1:
-#                 supp_dict = dictionary[learnsheet.cell(row=row, column=col-1).value]
-#             # elif col == 1:
-#             #     supp_dict = dictionary
-#             # assert isinstance(supp_dict, dict), "subtheme is not an dict: %r" % supp_dict
-#             supp_dict.update({learnsheet.cell(row=row, column=col).value: {}})
-#
-#             # for A in A_testsheet:
-#             #     learnthemes[wb2.sheetnames[i]].update({learnsheet.cell(row=A.row, column=1).value: {}})
-#             #
-#             # for B in B_testsheet:
-#             #     learnthemes[wb2.sheetnames[i]][learnsheet.cell(row=B.row, column=1).value].update(
-#             #         {learnsheet.cell(row=B.row, column=2).value: {}})
-#             #
-#             # for C in C_testsheet:
-#             #     learnthemes[wb2.sheetnames[i]][learnsheet.cell(row=C.row, column=1).value][
-#             #         learnsheet.cell(row=C.row, column=2).value].update({learnsheet.cell(row=C.row, column=3).value: {}})
-# themes = dict()
-# for A in A_testsheet:
-#     themes.update({testsheet.cell(row=A.row, column=1).value: {}})
-#
-# for B in B_testsheet:
-#     for key, value in themes.items():
-#         if key == testsheet.cell(row=B.row, column=1).value:
-#             value.update({testsheet.cell(row=B.row, column=2).value: {}})
-#
-# for C in C_testsheet:
-#     for key, value in themes.items():
-#         if key == testsheet.cell(row=C.row, column=1).value:
-#             for key, value in value.items():
-#                 if key == testsheet.cell(row=C.row, column=2).value:
-#                     value.update({testsheet.cell(row=C.row, column=3).value: {}})
 
 def wb_save():
     global wb, wb2
@@ -135,24 +75,20 @@ def wb_save():
 
 
 def log_message(message, answer):
-    from datetime import datetime
-    msg = "{0}: От {1} {2}\nТекст = {3}\nОтветил = {4}".format(datetime.now().strftime("%d/%m/%y %H:%M"),
-                                                               message.from_user.first_name,
-                                                               message.from_user.last_name,
-                                                               message.text,
-                                                               answer)
-    print("\n---Сообщение---")
+    msg = "От %s\nТекст = %s\nОтветил = %s"%(sender_name(message),message.text,answer)
+    print("\n---Вывод в консоль: Сообщение---")
     print(msg)
-    logger.info(msg)
+    # logging.info(msg, extra={'my_time': datetime.now().strftime("%H.%M")})
+    logging.info(msg)
     boss_message(msg)
 
 
 def log_error(err):
-    print("\n---Ошибка--- ")
-    from datetime import datetime
-    print(datetime.now().__format__("%d/%m/%y %H:%M"), '\n')
-    print(err)
-    logger.error(err.__str__())
+    print("\n---Вывод в консоль: Ошибка--- ")
+    print(datetime.now().strftime("%d/%m/%y %H:%M"), '\n')
+    print(err.__str__())
+    # logging.error(err.__str__(), extra={'my_time': datetime.now().strftime("%H.%M")})
+    logging.error(err.__str__())
     dev_message(err.__str__())
 
 
@@ -241,7 +177,7 @@ def handle_text(message):
             bot.send_message(message.chat.id, 'Ждите')
             bot.send_message(constants.bossChatID, sender_name(message) + " - новенький и нетерпеливый",
                              reply_markup=boss_default_markup())
-        logger.info('юзер шлёт start повторно, ничего не делаю')
+        logging.info('юзер шлёт start повторно, ничего не делаю')#, extra={'my_time': datetime.now().strftime("%H.%M")})
 
 
 @bot.message_handler(commands=["stop"])
@@ -277,8 +213,9 @@ def handle_money(message):
         if check:
             bot.send_message(constants.bossChatID, msg, reply_markup=user_markup)
         else:
-            bot.send_message(constants.bossChatID, "Долгов нет", reply_markup=boss_default_markup())
-        log_message(message, "Команда /Бабло")
+            msg = "Долгов нет"
+            bot.send_message(constants.bossChatID, msg, reply_markup=boss_default_markup())
+        log_message(message, msg)
 
 
 @bot.message_handler(commands=["Люди"])
@@ -363,6 +300,7 @@ def handle_text(message):
                 users_sheet.cell(row=cell.row, column=5).value = 0
 
                 try:
+                    # TODO блок try при отправке сообщений пользователю - срабытывает или нет - хз
                     bot.send_message(users_sheet.cell(row=cell.row, column=2).value, "Подтверждено")
                 except telebot.apihelper.ApiException as exception:
                     log_error(exception)
@@ -373,16 +311,17 @@ def handle_text(message):
             elif "Не получил" in message.text:
                 users_sheet.cell(row=cell.row, column=5).value = 0
                 try:
+                    # TODO блок try при отправке сообщений пользователю - срабытывает или нет - хз
                     bot.send_message(users_sheet.cell(row=cell.row, column=2).value, "Не подтверждено")
                 except telebot.apihelper.ApiException as exception:
                     log_error(exception)
                     print(exception.result)
-                logger.info('не сложил')
+                logging.info('не сложил')#, extra={'my_time': datetime.now().strftime("%H.%M")})
                 people = False
 
             wb_save()
 
-            logger.info(message.text)
+            logging.info(message.text)
 
             if people:
                 handle_people(message)
@@ -584,7 +523,7 @@ def handle_text(message):
 
                 if check:
                     msg = 'Принято: "{0} {1}"'.format(rashodnik[sender_name(message)], message.text)
-                    logger.info('{0}: {1}'.format(sender_name(message), msg))
+                    logging.info('{0}: {1}'.format(sender_name(message), msg))
                     bot.send_message(message.chat.id, msg, reply_markup=user_default_markup())
 
                     #rashodnik[sender_name(message)] = ''
@@ -608,7 +547,7 @@ def handle_text(message):
                     wb_save()
 
                 else:
-                    logger.info('Наёбывают')
+                    logging.info('Наёбывают')
                     rashodnik[sender_name(message)] = ''
                     rashod[sender_name(message)] = False
                     bot.send_message(message.chat.id, 'Какая-то ошибка, давайте заново', reply_markup=user_default_markup())
@@ -624,14 +563,14 @@ def handle_text(message):
                 users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=5).value += int(message.text)
                 # answer = "Принял, требуется подтверждение"
                 answer = 'Принято: "В кассу {0} рублей". Требуется подтверждение босса.'.format(abs(int(message.text)))
-                logger.info('Добавил в кредит: ', '{0}: "{1}"'.format(sender_name(message), message.text))
+                logging.info('Добавил в кредит: ', '{0}: "{1}"'.format(sender_name(message), message.text))
             else:
                 from datetime import datetime
                 tools_income.append([datetime.now(), sender_name(message), message.text])
 
                 users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=4).value += int(message.text)
                 answer = 'Принято: "На руки {0} рублей"'.format(int(message.text))
-                logger.info('Добавил в дебит: ', '{0}: "{1}"'.format(sender_name(message), message.text))
+                logging.info('Добавил в дебит: ', '{0}: "{1}"'.format(sender_name(message), message.text))
             wb_save()
             log_message(message, answer)
             bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
@@ -661,12 +600,12 @@ def handle_text(message):
         my_list = list()
         for cell in A_column:
             assert cell.value != None, "неправильная ячейка: {0} {1} = None".format(cell.row, cell.column)
-            my_list.append(cell.value)
-
-        # unique(my_list)
+            if cell.value not in my_list:
+                my_list.append(cell.value)
 
         user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        for item in unique(my_list):
+        # for item in unique(my_list):
+        for item in my_list:
             assert isinstance(item, str), 'oops not a string - {0}'.format(type(item))
             user_markup.row(item)
         user_markup.row('Отмена')
@@ -801,13 +740,14 @@ def handle_text(message):
     bot.send_message(message.chat.id, "Пришел стикер, неожиданно /start")
 
 
-while True:
-    try:
-        # logger.info('Запустил')
-        bot.polling(none_stop=True, timeout=60)
-        # bot.polling(none_stop=True, interval=0)
-    except Exception as e:
-        wb_save()
-        bot.stop_polling()
-        log_error(e)
-        sleep(15)
+if __name__ == "__main__":
+    while True:
+        try:
+            logging.info('Запустил')#, extra={'my_time': datetime.now().strftime("%H.%M")})
+            bot.polling(none_stop=True, timeout=60)
+            # bot.polling(none_stop=True, interval=0)
+        except Exception as e:
+            wb_save()
+            bot.stop_polling()
+            log_error(e)
+            sleep(15)

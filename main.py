@@ -378,7 +378,7 @@ def handle_text(message):
 level = dict()
 
 
-def istested(my_dict, name):
+def islearned(my_dict, name):
     try:
         return my_dict[name]['level']>0
     except KeyError as e:
@@ -614,8 +614,8 @@ def handle_text(message):
                          reply_markup=user_markup)
         #если второй столбец не последни заполненный из выбранного раздела,
         #  то бот вываливает кнопки с уникальными разделами второго столбца и так далее
-
-    elif istested(level, sender_name(message)):
+    # он находится в процессе обучения
+    elif islearned(level, sender_name(message)):
         # {sender_name(message): {'sheet': message.text, 'level': 1}}
         my_sheet = level[sender_name(message)]['sheet']
         my_col = level[sender_name(message)]['level']
@@ -626,6 +626,7 @@ def handle_text(message):
         assert my_col <= len(ascii_uppercase), "oh shi too deep"
         N_column = N_sheet[ascii_uppercase[my_col-1]]
 
+        # текст сообщения есть в нужной колонке
         if row_of_value_in_cells(message.text, N_column):
             my_row = row_of_value_in_cells(message.text, N_column)
         else:
@@ -635,7 +636,9 @@ def handle_text(message):
             del level[sender_name(message)]
             return
 
+        # это предпоследняя ячейка и надо отправить значения
         if N_sheet.cell(row=my_row, column=my_col+2).value == None:
+            # перебираем, чтобы построчно отправлять
             for cell in N_column:
                 if cell.value == message.text:
                     # assert (N_sheet.cell(row=cell.row, column=my_col-1).value == \
@@ -643,16 +646,20 @@ def handle_text(message):
                     # bot.send_message(message.from_user.id,
                     #                  N_sheet.cell(row=cell.row, column=my_col+1).value,
                     #                  reply_markup=user_default_markup())
+                    # если колонка первая то отправляем всё дерьмо
                     if my_col == 1:
                         bot.send_message(message.from_user.id,
                                          N_sheet.cell(row=cell.row, column=my_col + 1).value,
                                          reply_markup=user_default_markup())
+                    # проходим только по одной категории выбраного текста
                     elif (N_sheet.cell(row=cell.row, column=my_col-1).value == N_sheet.cell(row=my_row, column=my_col-1).value):
                         bot.send_message(message.from_user.id,
                                          N_sheet.cell(row=cell.row, column=my_col + 1).value,
                                          reply_markup=user_default_markup())
-                    else:
-                        assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
+                    # другие категории и assert здесь - очень тупое решение
+                    # а assert False вообще говорит, что ты тупо не знаешь что пишешь
+                    # else:
+                    #     assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
             del level[sender_name(message)]
         else:
             my_list = list()
@@ -747,6 +754,7 @@ if __name__ == "__main__":
             bot.polling(none_stop=True, timeout=60)
             # bot.polling(none_stop=True, interval=0)
         except Exception as e:
+            logging.info('Остановил')
             wb_save()
             bot.stop_polling()
             log_error(e)

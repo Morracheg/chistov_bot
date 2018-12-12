@@ -11,6 +11,13 @@ notificationsDev = False
 rashod = dict()
 rashodnik = dict()
 
+# переменная для слежения за процессом обучения, содержит имя пользователя, страницу обучения и уровень глубины
+level = dict()
+
+# процесс тестирования - задать вопрос - считать ответ - записать пару вопрос/ответ в таблицу
+test_level = dict()
+# задать первый (не заданный) вопрос
+
 # складывать логи в подпапку логи и TODO дробить на дни
 logging.basicConfig(format=u'%(levelname)-8s [%(asctime)s] %(name)s %(message)s',
 # logging.basicConfig(format=u'%(levelname)-8s [%(my_time)s] %(name)s %(message)s',
@@ -106,8 +113,14 @@ def user_default_markup():
     default_markup.row('Взять оборудование')
     default_markup.row('Сдать оборудование')
     default_markup.row('Взять расходники')
-    default_markup.row('Обучение')
+    default_markup.row('Обучение','Тестирование')
     return default_markup
+
+def user_testing_markup():
+    markup = telebot.types.ReplyKeyboardMarkup(True, False)
+    # markup.row('Следующий вопрос')
+    markup.row('Отмена')
+    return markup
 
 
 def column_to_txt(letter):
@@ -291,7 +304,7 @@ def handle_text(message):
                 bot.send_message(users_sheet.cell(row=cell.row, column=2).value, "Мы с Вами не дружим")
 
             elif "Получил" in message.text:
-                from datetime import datetime
+                # from datetime import datetime
                 tools_income.append([datetime.now(),
                                      users_sheet.cell(row=cell.row, column=1).value,
                                      users_sheet.cell(row=cell.row, column=5).value])
@@ -373,22 +386,36 @@ def handle_text(message):
     #     bot.send_message(message.chat.id, "Работаем", reply_markup=boss_default_markup())
 
 
-# TODO может убрать страницы обучения сделав их первой колонкой
-# переменная для слежения за процессом обучения, содержит имя пользователя, страницу обучения и уровень глубины
-level = dict()
-
-
 def islearned(my_dict, name):
     try:
         return my_dict[name]['level']>0
     except KeyError as e:
-        log_error(e)
-    return False
+        return False
+
+
+def istested(name):
+    try:
+        return len(test_level[name])>0
+    except Exception as e:
+        return False
 
 
 def unique(sequence):
     seen = set()
     return [x for x in sequence if not (x in seen or seen.add(x))]
+
+# вернуть первый (не заданный) вопрос
+def next_question(sender):
+    global wb2
+
+    for q_row in tuple(wb2['Тестирование'].values)[1:]:
+        if any((q_row[0] == l_row[2] and sender == l_row[1]) for l_row in tuple(wb2['ТестЛог'].values)[1:]):
+            continue
+        else:
+            return q_row[0]
+        # print([x for l_row in tuple(wb2['ТестЛог'].values)[1:] if q_row[0] == l_row[2] and sender == l_row[1]])
+
+    return ''
 
 # обработка сообщений пользователя с value == 'принят'
 # TODO обработка сообщений таким образом пропускает всех, кто начал не со "/start"
@@ -398,7 +425,7 @@ def unique(sequence):
                      content_types=["text"])
 def handle_text(message):
     global users_sheet, tools_sheet, tools_book, tools_income # log_sheet
-    global rashod, material_book, rashodnik, material_log_book, level
+    global rashod, material_book, rashodnik, material_log_book, level, test_level
     if 'Взять оборудование' == message.text:
         # отправить список незанятого оборудования
         tools_tools = tools_sheet['A']  # колонка наименования оборудования
@@ -482,7 +509,7 @@ def handle_text(message):
             user_markup.row('Отмена')
             bot.send_message(message.chat.id, 'Сколько?', reply_markup=user_markup)
         else:
-            from datetime import datetime
+            # from datetime import datetime
 
             tools_tools = tools_sheet['A']  # колонка оборудования
             for tool in tools_tools:
@@ -503,7 +530,7 @@ def handle_text(message):
 
             bot.send_message(message.from_user.id, "Принято", reply_markup=user_default_markup())
             bot.send_message(constants.bossChatID, '{0}: "{1}"'.format(sender_name(message), message.text))
-
+    # TODO это уже не так работает, исходя из всякого тестирования и обучения
     elif isint(message.text):
         if rashod[sender_name(message)]:
             if int(message.text) > 0:
@@ -535,7 +562,7 @@ def handle_text(message):
                                                                                   message.text))
 
                     # запишем в лог
-                    from datetime import datetime
+                    # from datetime import datetime
                     # здесь реверсивно
                     up_or_down = '+' if (sender_name(message) in 'Gladneva Inna') else '-'
                     up_or_down += message.text
@@ -563,14 +590,14 @@ def handle_text(message):
                 users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=5).value += int(message.text)
                 # answer = "Принял, требуется подтверждение"
                 answer = 'Принято: "В кассу {0} рублей". Требуется подтверждение босса.'.format(abs(int(message.text)))
-                logging.info('Добавил в кредит: ', '{0}: "{1}"'.format(sender_name(message), message.text))
+                logging.info('Добавил в кредит: {0}: "{1}"'.format(sender_name(message), message.text))
             else:
-                from datetime import datetime
+                # from datetime import datetime
                 tools_income.append([datetime.now(), sender_name(message), message.text])
 
                 users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=4).value += int(message.text)
                 answer = 'Принято: "На руки {0} рублей"'.format(int(message.text))
-                logging.info('Добавил в дебит: ', '{0}: "{1}"'.format(sender_name(message), message.text))
+                logging.info('Добавил в дебит: {sender_name(message)}: "{message.text}"')
             wb_save()
             log_message(message, answer)
             bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
@@ -591,6 +618,19 @@ def handle_text(message):
                          reply_markup=user_markup)
         level.update({sender_name(message): {'sheet': message.text, 'level': 0}})
 
+    elif 'Тестирование' == message.text: # or 'Следующий вопрос' == message.text:
+        # TODO возможно их разделить и призаходе в тестирование определять не начато ли уже какое-то тестирование
+        do_testing(message)
+        # msg = next_question(sender_name(message))
+        # if msg:
+        #     bot.send_message(message.from_user.id, msg, # 'Начинаем тестирование:\n'+msg,
+        #                      reply_markup=user_testing_markup())
+            # test_level.update({sender_name(message): msg})
+        # else:
+        #     test_level.update({sender_name(message): ''})
+            # bot.send_message(message.from_user.id, 'Вопросов для вас больше нет!',
+            #                  reply_markup=user_default_markup())
+
     elif ispage(message.text):
         level.update({sender_name(message): {'sheet': message.text, 'level': 1}})
         # TODO начать таймер
@@ -599,6 +639,7 @@ def handle_text(message):
 
         my_list = list()
         for cell in A_column:
+            # TODO возможно вынести формирование листа и проверку из функции
             assert cell.value != None, "неправильная ячейка: {0} {1} = None".format(cell.row, cell.column)
             if cell.value not in my_list:
                 my_list.append(cell.value)
@@ -616,6 +657,10 @@ def handle_text(message):
         #  то бот вываливает кнопки с уникальными разделами второго столбца и так далее
     # он находится в процессе обучения
     elif islearned(level, sender_name(message)):
+        try:
+            del test_level[sender_name(message)]
+        except Exception:
+            pass
         # {sender_name(message): {'sheet': message.text, 'level': 1}}
         my_sheet = level[sender_name(message)]['sheet']
         my_col = level[sender_name(message)]['level']
@@ -702,11 +747,37 @@ def handle_text(message):
         #     bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
         #                      reply_markup=user_markup)
 
+    elif istested(sender_name(message)):
+        # если test_level содержит вопрос, то мы записываем введённое в ответ
+        # если test_level содержит пустую строку, то закончились вопросы для человека, но зачем тогда реагировать на ввод
+        # если test_level не содержит ничего то мы сюда не попадаем
+        try:
+            del level[sender_name(message)]
+        except Exception:
+            pass
+        wb2['ТестЛог'].append([datetime.now(), sender_name(message), test_level[sender_name(message)], message.text])
+        wb_save()
+        do_testing(message)
+        # bot.send_message(message.from_user.id, 'Ответ принят. Продолжаем?',
+        #                  reply_markup=user_testing_markup())
+        # del test_level[sender_name(message)]
+
     else:
         answer = "Что-что?"
         log_message(message, answer)
         bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
 
+def do_testing(message):
+    global test_level
+    msg = next_question(sender_name(message))
+    if msg:
+        bot.send_message(message.from_user.id, msg,
+                         reply_markup=user_testing_markup())
+        test_level.update({sender_name(message): msg})
+    else:
+        test_level.update({sender_name(message): ''})
+        bot.send_message(message.from_user.id, 'Вопросов для вас больше нет!',
+                         reply_markup=user_default_markup())
 
 # value='отклонён'
 @bot.message_handler(func=lambda message: message.from_user.id != constants.bossChatID and

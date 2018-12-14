@@ -4,27 +4,23 @@ from openpyxl import load_workbook
 from time import sleep
 from datetime import datetime
 import logging
+
 # TODO пока не будем отправлять
 notificationsBoss = False
 notificationsDev = False
 
 rashod = dict()
 rashodnik = dict()
-
-# переменная для слежения за процессом обучения, содержит имя пользователя, страницу обучения и уровень глубины
+# переменная для слежения за процессом обучения и тестирования, содержит:
+# имя пользователя - страницу обучения и уровень глубины / вопрос на тест и уровень вопроса
 level = dict()
 
-# процесс тестирования - задать вопрос - считать ответ - записать пару вопрос/ответ в таблицу
-test_level = dict()
-# задать первый (не заданный) вопрос
-
 # складывать логи в подпапку логи и TODO дробить на дни
-logging.basicConfig(format=u'%(levelname)-8s [%(asctime)s] %(name)s %(message)s',
 # logging.basicConfig(format=u'%(levelname)-8s [%(my_time)s] %(name)s %(message)s',
+logging.basicConfig(format=u'%(levelname)-8s [%(asctime)s] %(name)s %(message)s',
                     level=logging.INFO,
-                    filename=u'логи/%s.log'%datetime.now().strftime("%d-%m-%Y"))
+                    filename=u'логи/{0}.log'.format(datetime.now().strftime("%d-%m-%Y")))
 
-# telebot.logger.setLevel(logging.WARNING)
 telebot.logger.setLevel(logging.INFO)
 
 bot = telebot.TeleBot(constants.token)
@@ -61,7 +57,7 @@ try:
     wb2 = load_workbook('ТренингБОТ.xlsx')
 
 except FileNotFoundError as error:
-    msg = 'Не могу найти файл "%s", а без него работать не могу'%(error.filename)
+    msg = 'Не могу найти файл "{0}", а без него работать не могу'.format(error.filename)
     print(msg)
     # logging.error(msg, extra={'my_time': datetime.now().strftime("%H.%M")})
     logging.error(msg)
@@ -70,7 +66,7 @@ except FileNotFoundError as error:
 
 
 def wb_save():
-    global wb, wb2
+    # global wb, wb2
     try:
         wb.save('оборудование.xlsx')
         wb2.save('ТренингБОТ.xlsx')
@@ -81,8 +77,18 @@ def wb_save():
         return False
 
 
+def book_save(book, name):
+    try:
+        book.save(name)
+        return True
+    except Exception as exception:
+        boss_message('Не могу использовать файл {0}, исправьте и повторите'.format(name))
+        log_error(exception)
+        return False
+
+
 def log_message(message, answer):
-    msg = "От %s\nТекст = %s\nОтветил = %s"%(sender_name(message),message.text,answer)
+    msg = "От {0}\nТекст = {1}\nОтветил = {2}".format(sender_name(message), message.text, answer)
     print("\n---Вывод в консоль: Сообщение---")
     print(msg)
     # logging.info(msg, extra={'my_time': datetime.now().strftime("%H.%M")})
@@ -115,6 +121,7 @@ def user_default_markup():
     default_markup.row('Взять расходники')
     default_markup.row('Обучение','Тестирование')
     return default_markup
+
 
 def user_testing_markup():
     markup = telebot.types.ReplyKeyboardMarkup(True, False)
@@ -170,7 +177,7 @@ def col_row_of_value_in_cells(value, cells):
     return dict(col=0, row= 0)
 
 @bot.message_handler(commands=["start"])
-def handle_text(message):
+def handle_start(message):
     global users_sheet
     # старт работы любого пользователя, а не когда уже начал отправлять числа
     if message.from_user.id == constants.bossChatID:
@@ -194,13 +201,13 @@ def handle_text(message):
 
 
 @bot.message_handler(commands=["stop"])
-def handle_text(message):
+def handle_stop(message):
     # тут юзер клавиатура убирается
     bot.send_message(message.chat.id, 'Ок, не мешаю', reply_markup=telebot.types.ReplyKeyboardRemove())
 
 
 @bot.message_handler(commands=["settings"])
-def handle_text(message):
+def handle_settings(message):
     answer = "Пришла команда, но настраивать нечего!!"
     log_message(message, answer)
     bot.send_message(message.chat.id, answer)
@@ -261,10 +268,20 @@ def handle_text(message):
         return
     elif "Отправь" in message.text:
         if "файл" in message.text:
+            user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+            user_markup.row('Отправь оборудование', 'Отправь ТренингБОТ')
+            user_markup.row('Отмена')
+            bot.send_message(message.chat.id, "Какой файл?", reply_markup=user_markup)
+        elif 'оборудование' in message.text:
             if wb_save():
-                bot.send_message(message.chat.id, "Файл:", reply_markup=boss_default_markup())
-                doc = open('оборудование.xlsx', 'rb')
-                bot.send_document(message.chat.id, doc)
+                # bot.send_message(message.chat.id, "Файл:", reply_markup=boss_default_markup())
+                # doc = open('оборудование.xlsx', 'rb')
+                bot.send_document(message.chat.id, open('оборудование.xlsx', 'rb'), reply_markup=boss_default_markup())
+            else:
+                bot.send_message(message.chat.id, "Нет доступа к файлу", reply_markup=boss_default_markup())
+        elif 'ТренингБОТ' in message.text:
+            if wb_save():
+                bot.send_document(message.chat.id, open('ТренингБОТ.xlsx', 'rb'), reply_markup=boss_default_markup())
             else:
                 bot.send_message(message.chat.id, "Нет доступа к файлу", reply_markup=boss_default_markup())
         elif "дебит" in message.text:
@@ -282,7 +299,7 @@ def handle_text(message):
             user_markup.row('Отправь дебит', 'Отправь кредит')
             # user_markup.row('Покажи файл пользователей', 'Покажи файл с дебитом', 'Покажи файл с кредитом')
             user_markup.row('Отмена')
-            bot.send_message(message.chat.id, "Что показать?", reply_markup=user_markup)
+            bot.send_message(message.chat.id, "Что отправить?", reply_markup=user_markup)
 
     # Босс отправляет сообщения, содержащие пользователя
     # TODO пользователь с Сохрани/Покажи/Отмена в имени сломает всё нахрен
@@ -386,36 +403,19 @@ def handle_text(message):
     #     bot.send_message(message.chat.id, "Работаем", reply_markup=boss_default_markup())
 
 
-def islearned(my_dict, name):
+def islearned(name):
     try:
-        return my_dict[name]['level']>0
+        return level[name]['обучение']
     except KeyError as e:
         return False
 
 
 def istested(name):
     try:
-        return len(test_level[name])>0
+        return not level[name]['обучение']
     except Exception as e:
         return False
 
-
-def unique(sequence):
-    seen = set()
-    return [x for x in sequence if not (x in seen or seen.add(x))]
-
-# вернуть первый (не заданный) вопрос
-def next_question(sender):
-    global wb2
-
-    for q_row in tuple(wb2['Тестирование'].values)[1:]:
-        if any((q_row[0] == l_row[2] and sender == l_row[1]) for l_row in tuple(wb2['ТестЛог'].values)[1:]):
-            continue
-        else:
-            return q_row[0]
-        # print([x for l_row in tuple(wb2['ТестЛог'].values)[1:] if q_row[0] == l_row[2] and sender == l_row[1]])
-
-    return ''
 
 # обработка сообщений пользователя с value == 'принят'
 # TODO обработка сообщений таким образом пропускает всех, кто начал не со "/start"
@@ -425,7 +425,8 @@ def next_question(sender):
                      content_types=["text"])
 def handle_text(message):
     global users_sheet, tools_sheet, tools_book, tools_income # log_sheet
-    global rashod, material_book, rashodnik, material_log_book, level, test_level
+    global rashod, material_book, rashodnik, material_log_book, level
+
     if 'Взять оборудование' == message.text:
         # отправить список незанятого оборудования
         tools_tools = tools_sheet['A']  # колонка наименования оборудования
@@ -436,7 +437,7 @@ def handle_text(message):
             if tool.value is not None \
                     and tools_sheet.cell(row=tool.row, column=2).value == 'Свободен' \
                     and tool.row != 1:
-                user_markup.row('Взял {0}'.format(tool.value))
+                user_markup.row('⬅ Взял {0}'.format(tool.value))
                 check = True
         user_markup.row('Отмена')
 
@@ -462,7 +463,7 @@ def handle_text(message):
                     and material.row != 1:
                     # and int(material_book.cell(row=material.row, column=2).value) > 0 \
                 msg += '{0}: {1} единиц\n'.format(material.value, material_book.cell(row=material.row, column=2).value)
-                user_markup.row('Взял {0}'.format(material.value))
+                user_markup.row('⬅ Взял {0}'.format(material.value))
                 check = True
         user_markup.row('Отмена')
 
@@ -484,7 +485,7 @@ def handle_text(message):
             if tool.value is not None \
                     and tools_sheet.cell(row=tool.row, column=2).value == 'Взят' \
                     and tools_sheet.cell(row=tool.row, column=3).value == sender_name(message):
-                user_markup.row('Сдал {0}'.format(tool.value))
+                user_markup.row('➡ Сдал {0}'.format(tool.value))
                 check = True
         user_markup.row('Отмена')
 
@@ -495,8 +496,7 @@ def handle_text(message):
             bot.send_message(message.from_user.id, "Так Вы ничего и не брали",
                              reply_markup=user_default_markup())
 
-    elif 'Взял' in message.text or 'Сдал' in message.text:
-        # пришло (а пришло ли?) название оборудования и слово Взял или Сдал
+    elif '⬅ Взял' in message.text or '➡ Сдал' in message.text:
         # TODO ещё пополнить счетчик уборок? +1 когда вернули (но не всегда же +1)
         # TODO ещё счетчик времени уборок? суммировать время нахождения оборудования у клинера?
         # TODO опять же не всегда он будет его сразу после уборки сдавать
@@ -514,15 +514,15 @@ def handle_text(message):
             tools_tools = tools_sheet['A']  # колонка оборудования
             for tool in tools_tools:
                 if tool.value in message.text:  # добавить в статус(колонка 2) Взят или свободен
-                    if 'Взял' in message.text:
+                    if '⬅ Взял' in message.text:
                         tools_sheet.cell(row=tool.row, column=2).value = 'Взят'
                         # если Взят то добавить кем взят в 3ю колонку
                         tools_sheet.cell(row=tool.row, column=3).value = sender_name(message)
-                        tools_book.append([datetime.now(), sender_name(message), tool.value, 'Взяла'])
-                    elif 'Сдал' in message.text:
+                        tools_book.append([datetime.now(), sender_name(message), tool.value, '⬅ Взяла'])
+                    elif '➡ Сдал' in message.text:
                         tools_sheet.cell(row=tool.row, column=2).value = 'Свободен'
                         tools_sheet.cell(row=tool.row, column=3).value = 'На базе'
-                        tools_book.append([datetime.now(), sender_name(message), tool.value, 'Сдала'])
+                        tools_book.append([datetime.now(), sender_name(message), tool.value, '➡ Сдала'])
                     # записать в колонку 4 дату этого (любого?) события
                     tools_sheet.cell(row=tool.row, column=4).value = datetime.now()
 
@@ -530,7 +530,138 @@ def handle_text(message):
 
             bot.send_message(message.from_user.id, "Принято", reply_markup=user_default_markup())
             bot.send_message(constants.bossChatID, '{0}: "{1}"'.format(sender_name(message), message.text))
-    # TODO это уже не так работает, исходя из всякого тестирования и обучения
+
+    elif 'Отмена' == message.text:
+        rashodnik[sender_name(message)] = ''
+        rashod[sender_name(message)] = False
+        answer = "Работаем!"
+        log_message(message, answer)
+        bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
+        try:
+            del level[sender_name(message)]
+        except Exception:
+            pass
+
+    elif 'Обучение' == message.text:
+        user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+        for i in range(len(wb2.sheetnames) - 2):
+            user_markup.row(wb2.sheetnames[i])
+        user_markup.row('Отмена')
+        bot.send_message(message.from_user.id, "Выбирайте интересующие вас разделы, и изучайте информацию.",
+                         reply_markup=user_markup)
+        level.update({sender_name(message): {'обучение': True,'text': message.text, 'level': 0}})
+
+    elif 'Тестирование' == message.text:
+        bot.send_message(message.from_user.id, 'Начинаем тестирование:')
+
+        # msg = tuple(wb2['Тестирование'].values)[0][0]
+        msg = wb2['Тестирование']['A2'].value
+
+        level.update({sender_name(message): {'обучение': False,'text': msg, 'level': 1}})
+
+        bot.send_message(message.from_user.id, msg, reply_markup=user_testing_markup())
+    # доделать, если нужно организовать пропуск вопроса
+    elif 'Следующий вопрос' == message.text:
+        print('лол')
+        pass
+
+    elif ispage(message.text):
+        level.update({sender_name(message): {'обучение': True,'text': message.text, 'level': 1}})
+        # TODO начать таймер
+
+        A_column = wb2[level[sender_name(message)]['text']]['A']
+
+        my_list = list()
+        for cell in A_column:
+            # TODO возможно вынести формирование листа и проверку из функции
+            assert cell.value != None, "неправильная ячейка: {0} {1} = None".format(cell.row, cell.column)
+            if cell.value not in my_list:
+                my_list.append(cell.value)
+
+        user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+        # for item in unique(my_list):
+        for item in my_list:
+            assert isinstance(item, str), 'oops not a string - {0}'.format(type(item))
+            user_markup.row(item)
+        user_markup.row('Отмена')
+        # if len(testsheet.columns) != 2:
+        bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
+                         reply_markup=user_markup)
+        #если второй столбец не последни заполненный из выбранного раздела,
+        #  то бот вываливает кнопки с уникальными разделами второго столбца и так далее
+
+    elif islearned(sender_name(message)):
+        my_sheet = level[sender_name(message)]['text']
+        my_col = level[sender_name(message)]['level']
+
+        N_sheet = wb2[my_sheet]
+
+        from string import ascii_uppercase
+        assert my_col <= len(ascii_uppercase), "oh shi too deep"
+        N_column = N_sheet[ascii_uppercase[my_col-1]]
+
+        # текст сообщения есть в нужной колонке
+        if row_of_value_in_cells(message.text, N_column):
+            my_row = row_of_value_in_cells(message.text, N_column)
+        else:
+            bot.send_message(message.from_user.id,
+                             "Ошибка ввода. Давайте всё по новой",
+                             reply_markup=user_default_markup())
+            del level[sender_name(message)]
+            return
+
+        # это предпоследняя ячейка и надо отправить значения
+        if N_sheet.cell(row=my_row, column=my_col+2).value == None:
+            # перебираем, чтобы построчно отправлять
+            for cell in N_column:
+                if cell.value == message.text:
+                    # если колонка первая то отправляем всё дерьмо
+                    if my_col == 1:
+                        bot.send_message(message.from_user.id,
+                                         N_sheet.cell(row=cell.row, column=my_col + 1).value,
+                                         reply_markup=user_default_markup())
+                    # проходим только по одной категории выбраного текста
+                    elif (N_sheet.cell(row=cell.row, column=my_col-1).value == N_sheet.cell(row=my_row, column=my_col-1).value):
+                        sleep(1)
+                        bot.send_message(message.from_user.id,
+                                         N_sheet.cell(row=cell.row, column=my_col + 1).value,
+                                         reply_markup=user_default_markup())
+                    # другие категории и assert здесь - очень тупое решение
+                    # а assert False вообще говорит, что ты тупо не знаешь что пишешь
+                    # else:
+                    #     assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
+            del level[sender_name(message)]
+        else:
+            my_list = list()
+            for cell in N_column:
+                if cell.value == message.text and N_sheet.cell(row=cell.row, column=my_col+1).value not in my_list:
+                    my_list.append(N_sheet.cell(row=cell.row, column=my_col+1).value)
+
+            user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+            for item in my_list:
+                user_markup.row(item)
+            user_markup.row('Отмена')
+
+            bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
+                             reply_markup=user_markup)
+
+            # my_col = my_col+1
+            level[sender_name(message)]['level'] = level[sender_name(message)]['level']+1
+
+    elif istested(sender_name(message)):
+        wb2['ТестЛог'].append([datetime.now(), sender_name(message), level[sender_name(message)]['text'], message.text])
+        wb_save()
+
+        level[sender_name(message)]['level'] += 1
+
+        if level[sender_name(message)]['level'] < wb2['Тестирование'].max_row:
+            msg = tuple(wb2['Тестирование'].values)[level[sender_name(message)]['level']][0]
+            level[sender_name(message)]['text'] = msg
+            bot.send_message(message.from_user.id, msg, reply_markup=user_testing_markup())
+        else:
+            del level[sender_name(message)]
+            bot.send_message(message.from_user.id, 'Вы ответили на все вопросы!', reply_markup=user_default_markup())
+
     elif isint(message.text):
         if rashod[sender_name(message)]:
             if int(message.text) > 0:
@@ -538,10 +669,12 @@ def handle_text(message):
                 materials = material_book['A']
                 for material in materials:
                     if material.value in rashodnik[sender_name(message)]:
+                        # TODO не через Инну
                         if sender_name(message) in 'Gladneva Inna':
                             material_book.cell(row=material.row, column=2).value += int(message.text)
                         else:
                             material_book.cell(row=material.row, column=2).value -= int(message.text)
+                        msg = 'Принято: {0} - {1} ед.'.format(material.value, message.text)
                         check = True
                         if int(material_book.cell(row=material.row, column=2).value) <= int(
                                 material_book.cell(row=material.row, column=3).value):
@@ -549,12 +682,13 @@ def handle_text(message):
                                              'Босс пора пополнить запас {0}'.format(material.value))
 
                 if check:
-                    msg = 'Принято: "{0} {1}"'.format(rashodnik[sender_name(message)], message.text)
+                    # msg = 'Принято: "{0} {1}"'.format(rashodnik[sender_name(message)], message.text)
+                    # msg = 'Принято: "{0} {1}"'.format(':arrow_left: Взял Тряпка синяя НОВАЯ', message.text)
+                    # msg.replace('⬅ ','') # лог не воспринимает юникод
+                    log_message(message, msg)
                     logging.info('{0}: {1}'.format(sender_name(message), msg))
-                    bot.send_message(message.chat.id, msg, reply_markup=user_default_markup())
 
-                    #rashodnik[sender_name(message)] = ''
-                    #rashod[sender_name(message)] = False
+                    bot.send_message(message.chat.id, msg, reply_markup=user_default_markup())
 
                     bot.send_message(constants.bossChatID,
                                      '{0} отправил: "{1} {2}" (расходник)'.format(sender_name(message),
@@ -597,187 +731,16 @@ def handle_text(message):
 
                 users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=4).value += int(message.text)
                 answer = 'Принято: "На руки {0} рублей"'.format(int(message.text))
-                logging.info('Добавил в дебит: {sender_name(message)}: "{message.text}"')
+                logging.info('Добавил в дебит: {0}: "{1}"'.format(sender_name(message), message.text))
             wb_save()
             log_message(message, answer)
             bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
-
-    elif 'Отмена' == message.text:
-        rashodnik[sender_name(message)] = ''
-        rashod[sender_name(message)] = False
-        answer = "Работаем!"
-        log_message(message, answer)
-        bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
-
-    elif 'Обучение' == message.text:
-        user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        for i in range(len(wb2.sheetnames) - 2):
-            user_markup.row(wb2.sheetnames[i])
-        user_markup.row('Отмена')
-        bot.send_message(message.from_user.id, "Выбирайте интересующие вас разделы, и изучайте информацию.",
-                         reply_markup=user_markup)
-        level.update({sender_name(message): {'sheet': message.text, 'level': 0}})
-
-    elif 'Тестирование' == message.text: # or 'Следующий вопрос' == message.text:
-        # TODO возможно их разделить и призаходе в тестирование определять не начато ли уже какое-то тестирование
-        do_testing(message)
-        # msg = next_question(sender_name(message))
-        # if msg:
-        #     bot.send_message(message.from_user.id, msg, # 'Начинаем тестирование:\n'+msg,
-        #                      reply_markup=user_testing_markup())
-            # test_level.update({sender_name(message): msg})
-        # else:
-        #     test_level.update({sender_name(message): ''})
-            # bot.send_message(message.from_user.id, 'Вопросов для вас больше нет!',
-            #                  reply_markup=user_default_markup())
-
-    elif ispage(message.text):
-        level.update({sender_name(message): {'sheet': message.text, 'level': 1}})
-        # TODO начать таймер
-
-        A_column = wb2[level[sender_name(message)]['sheet']]['A']
-
-        my_list = list()
-        for cell in A_column:
-            # TODO возможно вынести формирование листа и проверку из функции
-            assert cell.value != None, "неправильная ячейка: {0} {1} = None".format(cell.row, cell.column)
-            if cell.value not in my_list:
-                my_list.append(cell.value)
-
-        user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        # for item in unique(my_list):
-        for item in my_list:
-            assert isinstance(item, str), 'oops not a string - {0}'.format(type(item))
-            user_markup.row(item)
-        user_markup.row('Отмена')
-        # if len(testsheet.columns) != 2:
-        bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
-                         reply_markup=user_markup)
-        #если второй столбец не последни заполненный из выбранного раздела,
-        #  то бот вываливает кнопки с уникальными разделами второго столбца и так далее
-    # он находится в процессе обучения
-    elif islearned(level, sender_name(message)):
-        try:
-            del test_level[sender_name(message)]
-        except Exception:
-            pass
-        # {sender_name(message): {'sheet': message.text, 'level': 1}}
-        my_sheet = level[sender_name(message)]['sheet']
-        my_col = level[sender_name(message)]['level']
-
-        N_sheet = wb2[my_sheet]
-
-        from string import ascii_uppercase
-        assert my_col <= len(ascii_uppercase), "oh shi too deep"
-        N_column = N_sheet[ascii_uppercase[my_col-1]]
-
-        # текст сообщения есть в нужной колонке
-        if row_of_value_in_cells(message.text, N_column):
-            my_row = row_of_value_in_cells(message.text, N_column)
-        else:
-            bot.send_message(message.from_user.id,
-                             "Ошибка ввода. Давайте всё по новой",
-                             reply_markup=user_default_markup())
-            del level[sender_name(message)]
-            return
-
-        # это предпоследняя ячейка и надо отправить значения
-        if N_sheet.cell(row=my_row, column=my_col+2).value == None:
-            # перебираем, чтобы построчно отправлять
-            for cell in N_column:
-                if cell.value == message.text:
-                    # assert (N_sheet.cell(row=cell.row, column=my_col-1).value == \
-                    #     N_sheet.cell(row=my_row, column=my_col-1).value), 'неправильная выдача'
-                    # bot.send_message(message.from_user.id,
-                    #                  N_sheet.cell(row=cell.row, column=my_col+1).value,
-                    #                  reply_markup=user_default_markup())
-                    # если колонка первая то отправляем всё дерьмо
-                    if my_col == 1:
-                        bot.send_message(message.from_user.id,
-                                         N_sheet.cell(row=cell.row, column=my_col + 1).value,
-                                         reply_markup=user_default_markup())
-                    # проходим только по одной категории выбраного текста
-                    elif (N_sheet.cell(row=cell.row, column=my_col-1).value == N_sheet.cell(row=my_row, column=my_col-1).value):
-                        bot.send_message(message.from_user.id,
-                                         N_sheet.cell(row=cell.row, column=my_col + 1).value,
-                                         reply_markup=user_default_markup())
-                    # другие категории и assert здесь - очень тупое решение
-                    # а assert False вообще говорит, что ты тупо не знаешь что пишешь
-                    # else:
-                    #     assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
-            del level[sender_name(message)]
-        else:
-            my_list = list()
-            for cell in N_column:
-                if cell.value == message.text and N_sheet.cell(row=cell.row, column=my_col+1).value not in my_list:
-                    my_list.append(N_sheet.cell(row=cell.row, column=my_col+1).value)
-
-            user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-            for item in my_list:
-                user_markup.row(item)
-            user_markup.row('Отмена')
-
-            bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
-                             reply_markup=user_markup)
-
-            # my_col = my_col+1
-            level[sender_name(message)]['level'] = level[sender_name(message)]['level']+1
-
-
-        #проверка наличия в листе
-        # colrow_dict = col_row_of_value_in_cells(message.text, wb2[level[sender_name(message)]['sheet']].get_cell_collection)
-        # if colrow_dict['col'] != 0 and colrow_dict['row'] !=0:
-        #     # N_column = wb2[level[sender_name(message)]['sheet']].iter_cols()
-        #     N_sheet = wb2[level[sender_name(message)]['sheet']]
-        #     N_column = N_sheet.columns[colrow_dict['col']]
-        #
-        #     user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        #     # мы нашли на странице значение и должны показать или кнопки или обучающую информацию
-        #     if N_sheet.cell(row=colrow_dict['row'], col=colrow_dict['col']+2).value == None:
-        #         bot.send_message(message.from_user.id,
-        #                          N_sheet.cell(row=colrow_dict['row'], col=colrow_dict['col']+1).value,
-        #                          reply_markup=user_default_markup())
-        #         del level[sender_name(message)]
-        #         for cell in N_column:
-        #             pass
-        #         # tools_sheet.cell(row=tool.row, column=2).value
-        #
-        #     user_markup.row('Отмена')
-        #
-        #     bot.send_message(message.from_user.id, "Обучение. Выбирайте что хотите узнать.",
-        #                      reply_markup=user_markup)
-
-    elif istested(sender_name(message)):
-        # если test_level содержит вопрос, то мы записываем введённое в ответ
-        # если test_level содержит пустую строку, то закончились вопросы для человека, но зачем тогда реагировать на ввод
-        # если test_level не содержит ничего то мы сюда не попадаем
-        try:
-            del level[sender_name(message)]
-        except Exception:
-            pass
-        wb2['ТестЛог'].append([datetime.now(), sender_name(message), test_level[sender_name(message)], message.text])
-        wb_save()
-        do_testing(message)
-        # bot.send_message(message.from_user.id, 'Ответ принят. Продолжаем?',
-        #                  reply_markup=user_testing_markup())
-        # del test_level[sender_name(message)]
 
     else:
         answer = "Что-что?"
         log_message(message, answer)
         bot.send_message(message.chat.id, answer, reply_markup=user_default_markup())
 
-def do_testing(message):
-    global test_level
-    msg = next_question(sender_name(message))
-    if msg:
-        bot.send_message(message.from_user.id, msg,
-                         reply_markup=user_testing_markup())
-        test_level.update({sender_name(message): msg})
-    else:
-        test_level.update({sender_name(message): ''})
-        bot.send_message(message.from_user.id, 'Вопросов для вас больше нет!',
-                         reply_markup=user_default_markup())
 
 # value='отклонён'
 @bot.message_handler(func=lambda message: message.from_user.id != constants.bossChatID and
@@ -799,22 +762,66 @@ def handle_text(message):
 
 
 @bot.message_handler(content_types=["document"])
-def handle_text(message):
-    bot.send_message(message.chat.id, "Пришел документ, неожиданно /start")
+def handle_document(message):
+    if message.chat.id == constants.bossChatID:
+        if message.document.file_name not in ('оборудование.xlsx', 'ТренингБОТ.xlsx'):
+            bot.send_message(constants.bossChatID, "Я не могу обработать этот файл",
+                             reply_markup = boss_default_markup())
+            return
+
+        import requests, shutil
+
+        file_info = bot.get_file(message.document.file_id)
+
+        url = 'https://api.telegram.org/file/bot{0}/{1}'.format(constants.token, file_info.file_path)
+        response = requests.get(url, stream=True)
+        with open(message.document.file_name, 'wb') as out_file:
+            shutil.copyfileobj(response.raw, out_file)
+        del response
+
+        if message.document.file_name == 'оборудование.xlsx':
+            global wb, tools_sheet, users_sheet, tools_income, tools_svod, tools_book, material_book, material_log_book
+            wb = load_workbook('оборудование.xlsx')
+            tools_sheet = wb['tools']
+            users_sheet = wb['users']
+            tools_income = wb['income']  # страница журнала выручки
+            tools_svod = wb['svod']  # страница журнала действий  оборудованием // 2 колонки цифр
+            tools_book = wb['book']  # страница журнала действий  оборудованием
+            material_book = wb['material']  # Расходник	Количество
+            material_log_book = wb['material_log']  # Дата	Клинер	Материал	Движение +/-
+
+            for user in users_sheet['A']:
+                if users_sheet.cell(row=user.row, column=3).value == 'принят':
+                    rashod[user.value] = False
+                    rashodnik[user.value] = ''
+        elif message.document.file_name == 'ТренингБОТ.xlsx':
+            global wb2
+            wb2 = load_workbook('ТренингБОТ.xlsx')
+        wb_save()
+    else:
+        bot.send_message(message.chat.id, "Пришел документ, неожиданно /start")
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def test_callback(call):
+    callback = telebot.types.CallbackQuery
+    bot.callback_query_handlers
+    print(call)
+    logging.info(call)
 
 
 @bot.message_handler(content_types=["audio"])
-def handle_text(message):
+def handle_audio(message):
     bot.send_message(message.chat.id, "Пришла аудиозапись, неожиданно /start")
 
 
 @bot.message_handler(content_types=["photo"])
-def handle_text(message):
+def handle_photo(message):
     bot.send_message(message.chat.id, "Пришло изображение, неожиданно /start")
 
 
 @bot.message_handler(content_types=["sticker"])
-def handle_text(message):
+def handle_sticker(message):
     bot.send_message(message.chat.id, "Пришел стикер, неожиданно /start")
 
 
@@ -825,6 +832,7 @@ if __name__ == "__main__":
             bot.polling(none_stop=True, timeout=60)
             # bot.polling(none_stop=True, interval=0)
         except Exception as e:
+            # HTTPSConnectionPool(host='api.telegram.org', port=443)
             logging.info('Остановил')
             wb_save()
             bot.stop_polling()

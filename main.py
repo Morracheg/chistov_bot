@@ -457,18 +457,27 @@ def handle_text(message):
         materials = material_book['A']  # колонка наименования расходника
         msg = ''
         check = False
-        user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-        for material in materials:
-            if material.value is not None \
-                    and material.row != 1:
-                    # and int(material_book.cell(row=material.row, column=2).value) > 0 \
-                msg += '{0}: {1} единиц\n'.format(material.value, material_book.cell(row=material.row, column=2).value)
-                user_markup.row('⬅ Взял {0}'.format(material.value))
+
+        # TODO переделал тут немного
+        # user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        user_markup = InlineKeyboardMarkup()
+
+        # for material in materials:
+        #     if material.value is not None and material.row != 1:
+                # msg += '{0}: {1} единиц\n'.format(material.value, material_book.cell(row=material.row, column=2).value)
+                # user_markup.row('⬅ Взял {0}'.format(material.value))
+                # check = True
+        # user_markup.row('Отмена')
+
+        for material in materials[1:]:
+            if material.value is not None:
+                msg = f'⬅ Взял {material.value} из {material_book.cell(row=material.row, column=2).value} единиц'
+                user_markup.add(InlineKeyboardButton(msg, callback_data=f"{material.value}"))
                 check = True
-        user_markup.row('Отмена')
 
         if check:  # расходники есть
-            bot.send_message(message.chat.id, msg, reply_markup=user_markup)
+            bot.send_message(message.chat.id, 'Выбирай', reply_markup=user_markup)
         else:  # расходников нет
             bot.send_message(message.chat.id, "Вы не можете ничего взять",
                              reply_markup=user_default_markup())
@@ -769,15 +778,26 @@ def handle_document(message):
                              reply_markup = boss_default_markup())
             return
 
-        import requests, shutil
-
         file_info = bot.get_file(message.document.file_id)
 
-        url = 'https://api.telegram.org/file/bot{0}/{1}'.format(constants.token, file_info.file_path)
-        response = requests.get(url, stream=True)
-        with open(message.document.file_name, 'wb') as out_file:
-            shutil.copyfileobj(response.raw, out_file)
-        del response
+        # import requests, shutil
+        #
+        # url = 'https://api.telegram.org/file/bot{0}/{1}'.format(constants.token, file_info.file_path)
+        # response = requests.get(url, stream=True)
+        # if response.status_code != 200:
+        #     with open(message.document.file_name, 'wb') as out_file:
+        #         shutil.copyfileobj(response.raw, out_file)
+        # del response
+
+        # TODO due to issue https://github.com/eternnoir/pyTelegramBotAPI/issues/581
+        try:
+            downloaded_file = bot.download_file(file_info.file_path)
+            with open(message.document.file_name, 'wb') as out_file:
+                out_file.write(downloaded_file)
+        except telebot.apihelper.ApiException as e:
+            log_error(e)
+            bot.reply_to(message, 'Не могу скачать файл')
+            return
 
         if message.document.file_name == 'оборудование.xlsx':
             global wb, tools_sheet, users_sheet, tools_income, tools_svod, tools_book, material_book, material_log_book
@@ -804,10 +824,13 @@ def handle_document(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def test_callback(call):
-    callback = telebot.types.CallbackQuery
-    bot.callback_query_handlers
-    print(call)
-    logging.info(call)
+    sender_name = call.from_user.last_name + ' ' + call.from_user.first_name
+    if rashod[sender_name]:
+        rashodnik[sender_name] = call.data
+        # user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
+        # user_markup.row('Отмена')
+        bot.send_message(call.from_user.id, 'Сколько?')
+    logging.info(call.data)
 
 
 @bot.message_handler(content_types=["audio"])

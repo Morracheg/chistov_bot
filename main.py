@@ -56,6 +56,9 @@ try:
 
     wb2 = load_workbook('ТренингБОТ.xlsx')
 
+    wb_log = load_workbook('Лог обучения.xlsx')
+    learn_log_sheet = wb_log['ОбучениеЛог']
+
 except FileNotFoundError as error:
     msg = 'Не могу найти файл "{0}", а без него работать не могу'.format(error.filename)
     print(msg)
@@ -148,6 +151,20 @@ def column_to_txt(letter):
 
 # фамилия, пробел и имя отправителя сообщения
 def sender_name(message):
+    if (message.from_user.last_name is None) and (message.from_user.first_name is None):
+        try:
+            raise NameError("поломанный юзер, буду пробовать работать и с таким, id - {0}".format(message.from_user.id))
+        except NameError as exception:
+            log_error(exception)
+            if message.from_user.id is not None:
+                return message.from_user.id
+            else:
+                # TODO поменять на throw
+                assert False, "поломанный юзер, совсем поломанный"
+    if message.from_user.last_name is None:
+        return message.from_user.first_name
+    if message.from_user.first_name is None:
+        return message.from_user.last_name
     return message.from_user.last_name + ' ' + message.from_user.first_name
 
 
@@ -269,7 +286,7 @@ def handle_text(message):
     elif "Отправь" in message.text:
         if "файл" in message.text:
             user_markup = telebot.types.ReplyKeyboardMarkup(True, False)
-            user_markup.row('Отправь оборудование', 'Отправь ТренингБОТ')
+            user_markup.row('Отправь оборудование', 'Отправь ТренингБОТ', 'Отправь Лог обучения')
             user_markup.row('Отмена')
             bot.send_message(message.chat.id, "Какой файл?", reply_markup=user_markup)
         elif 'оборудование' in message.text:
@@ -282,6 +299,11 @@ def handle_text(message):
         elif 'ТренингБОТ' in message.text:
             if wb_save():
                 bot.send_document(message.chat.id, open('ТренингБОТ.xlsx', 'rb'), reply_markup=boss_default_markup())
+            else:
+                bot.send_message(message.chat.id, "Нет доступа к файлу", reply_markup=boss_default_markup())
+        elif 'Лог обучения' in message.text:
+            if book_save(wb_log, 'Лог обучения.xlsx'):
+                bot.send_document(message.chat.id, open('Лог обучения.xlsx', 'rb'), reply_markup=boss_default_markup())
             else:
                 bot.send_message(message.chat.id, "Нет доступа к файлу", reply_markup=boss_default_markup())
         elif "дебит" in message.text:
@@ -424,7 +446,7 @@ def istested(name):
                                           users_sheet.cell(row=row_of_value_in_cells(message.from_user.id, users_sheet['B']), column=3).value == 'принят',
                      content_types=["text"])
 def handle_text(message):
-    global users_sheet, tools_sheet, tools_book, tools_income # log_sheet
+    global users_sheet, tools_sheet, tools_book, tools_income, learn_log_sheet
     global rashod, material_book, rashodnik, material_log_book, level
 
     if 'Взять оборудование' == message.text:
@@ -603,6 +625,13 @@ def handle_text(message):
         my_sheet = level[sender_name(message)]['text']
         my_col = level[sender_name(message)]['level']
 
+        if my_sheet == "Обучение":
+            bot.send_message(message.from_user.id,
+                             "Вы пытались узнать что-то у меня, но теперь это уже не важно. Давайте всё заново",
+                             reply_markup=user_default_markup())
+            del level[sender_name(message)]
+            return
+
         N_sheet = wb2[my_sheet]
 
         from string import ascii_uppercase
@@ -631,7 +660,6 @@ def handle_text(message):
                                          reply_markup=user_default_markup())
                     # проходим только по одной категории выбраного текста
                     elif (N_sheet.cell(row=cell.row, column=my_col-1).value == N_sheet.cell(row=my_row, column=my_col-1).value):
-                        sleep(1)
                         bot.send_message(message.from_user.id,
                                          N_sheet.cell(row=cell.row, column=my_col + 1).value,
                                          reply_markup=user_default_markup())
@@ -639,6 +667,8 @@ def handle_text(message):
                     # а assert False вообще говорит, что ты тупо не знаешь что пишешь
                     # else:
                     #     assert False, N_sheet.cell(row=cell.row, column=my_col-1).value
+            learn_log_sheet.append([datetime.now(), sender_name(message), level[sender_name(message)]['text'], message.text])
+            book_save(wb_log, 'Лог обучения.xlsx')
             del level[sender_name(message)]
         else:
             my_list = list()
